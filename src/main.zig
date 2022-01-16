@@ -148,11 +148,22 @@ pub fn parseTableFromTSV(table: []const u8, size: TableSize, alloc: std.mem.Allo
     };
 }
 
+const Tokenizer = @import("./Tokenizer.zig");
 
 pub fn main() anyerror!void {
-    var parser = expressions.Parser.init("A1+A2", std.testing.allocator);
+    var tokenizer = Tokenizer { .alloc = std.testing.allocator, .content = "A1+A2" };
+    while ( tokenizer.nextToken() ) | t | {
+        std.debug.print("Token: {s}", .{ @tagName(t.token_type) });
+        if ( t.token_type == .ident ) {
+            std.debug.print(" -> {s}\n", .{ t.content });
+        } else {
+            std.debug.print("\n", .{});
+        }
+    }
+    var parser = expressions.Parser.init("A1+A2+A3+(D4*C15)", std.testing.allocator);
     var expr = parser.parse();
     expressions.printExpressionTree(expr);
+
     return;
 }
 

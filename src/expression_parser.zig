@@ -9,7 +9,7 @@ const Tokenizer = @import("./Tokenizer.zig");
 // comparison -> term (('>'|'>='|'<='|'<') term)*
 // equality -> comparison ('<>'|'==' comparison)*
 
-pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group };
+pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err };
 
 pub const BinOpExpr = struct {
     lhs: ?*Expr = null,
@@ -30,9 +30,12 @@ pub const Expr = union(ExprType) {
     binary_op: BinOpExpr,
     unary_op: UnOpExpr,
     group: *Expr,
+    err: []const u8,
 };
 
 const Token = Tokenizer.Token;
+
+// A1+A2+A3
 
 pub const Parser = struct {
     const Self = @This();
@@ -47,6 +50,7 @@ pub const Parser = struct {
             .tokenizer = Tokenizer{ .alloc = alloc, .content = expr },
         };
     }
+    
     // A1<>B2
     fn matchToken(self: *Self, types: []const Tokenizer.TokType) bool {
         if (self.current_token == null) return false;
@@ -59,9 +63,20 @@ pub const Parser = struct {
         return false;
     }
 
-    pub fn advanceToken(self: *Self) void {
+    pub fn advanceToken(self: *Self) ?Token {
+        const current = self.current_token;
         self.current_token = self.tokenizer.nextToken();
+        return current;
     }
+
+    pub fn expectToken(self: *Self, token_type: Tokenizer.TokType) bool {
+        if ( self.current_token ) | token | {
+            return token.token_type == token_type;
+        } else {
+            return false;
+        }
+    }
+
 
     fn newBinaryOp(self: *Self, lhs: *Expr, op: Tokenizer.TokType, rhs: *Expr) *Expr {
         var tmp = self.alloc.create(Expr) catch unreachable;
@@ -74,14 +89,17 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Self) *Expr {
+        self.current_token = self.tokenizer.nextToken();
         return self.parseEquality();
     }
 
     fn parseEquality(self: *Self) *Expr {
         var expr = self.parseComparison();
         while (self.matchToken(&.{ .eq, .neq })) {
+            var operator = self.advanceToken();
             var rhs = self.parseComparison();
-            expr = self.newBinaryOp(expr, self.current_token.?.token_type, rhs);
+            expr = self.newBinaryOp(expr, operator.?.token_type, rhs);
+
         }
         return expr;
     }
@@ -89,27 +107,30 @@ pub const Parser = struct {
     fn parseComparison(self: *Self) *Expr {
         var expr: *Expr = self.parseTerm();
         while (self.matchToken(&.{ .gt, .gte, .lt, .lte })) {
+            var operator = self.advanceToken();
             var rhs = self.parseTerm();
-            expr = self.newBinaryOp(expr, self.current_token.?.token_type, rhs);
+            expr = self.newBinaryOp(expr, operator.?.token_type, rhs);
+
         }
         return expr;
     }
 
     fn parseTerm(self: *Self) *Expr {
-        var expr = self.parseFactor();
+        var expr = self.parseFactor(); 
         while (self.matchToken(&.{ .plus, .minus })) {
+            var operator = self.advanceToken();
             var rhs = self.parseFactor();
-            expr = self.newBinaryOp(expr, self.current_token.?.token_type, rhs);
+            expr = self.newBinaryOp(expr, operator.?.token_type, rhs);
         }
-
         return expr;
     }
 
     fn parseFactor(self: *Self) *Expr {
-        var expr = self.parseUnary();
+        var expr = self.parseUnary(); 
         while (self.matchToken(&.{ .slash, .mul })) {
+            var operator = self.advanceToken();
             var rhs = self.parseUnary();
-            expr = self.newBinaryOp(expr, self.current_token.?.token_type, rhs);
+            expr = self.newBinaryOp(expr, operator.?.token_type, rhs);
         }
 
         return expr;
@@ -117,12 +138,11 @@ pub const Parser = struct {
 
     fn parseUnary(self: *Self) *Expr {
         if (self.matchToken(&.{.minus})) {
-            var operator = self.current_token.?.token_type;
-            self.advanceToken();
+            var operator = self.advanceToken(); 
             var rhs = self.parseUnary();
             var expr_tmp = self.alloc.create(Expr) catch unreachable;
 
-            expr_tmp.* = Expr{ .unary_op = .{ .operand = operator, .rhs = rhs } };
+            expr_tmp.* = Expr{ .unary_op = .{ .operand = operator.?.token_type, .rhs = rhs } };
             return expr_tmp;
         }
 
@@ -130,6 +150,7 @@ pub const Parser = struct {
     }
 
     fn parsePrimary(self: *Self) *Expr {
+        if ( self.current_token == null ) std.debug.panic("End of input", .{});
         var primary_expr = self.alloc.create(Expr) catch unreachable;
         primary_expr.* = prim: {
             break :prim switch (self.current_token.?.token_type) {
@@ -137,11 +158,12 @@ pub const Parser = struct {
                 .true_ => Expr{ .boolean = true },
                 .ident => Expr{ .ident = self.current_token.?.content },
                 .lparen => {
-                    var expr = self.parse();
-                    self.advanceToken();
-                    if (!self.matchToken(&.{.rparen})) {
+                    var expr = self.parse(); // skip lparen token, advance start parsing
+                    printExpressionTree(expr);
+                    std.debug.assert( self.current_token != null );
+                    if (!self.expectToken(.rparen)) {
                         std.debug.panic("Expected ')' token", .{});
-                        break :prim Expr { .ident = self.current_token.?.content };
+                        break :prim Expr { .err = "Expected ')' token" };
                     } else {
                         break :prim Expr{ .group = expr };
                     }
@@ -149,6 +171,9 @@ pub const Parser = struct {
                 else => unreachable,
             };
         };
+
+        _ = self.advanceToken(); // load next token 
+
         return primary_expr;
     }
 };
@@ -180,6 +205,9 @@ pub fn printExpressionTree(expr: *Expr) void {
             std.debug.print("Group<\n", .{});
             printExpressionTree(expr.group);
             std.debug.print(">", .{});
+        },
+        Expr.err => {
+            std.debug.print("Err<{s}>\n", .{ expr.err });
         },
     }
 }

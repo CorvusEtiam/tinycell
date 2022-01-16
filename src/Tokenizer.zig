@@ -34,7 +34,8 @@ pub fn nextToken(self: *Self) ?Token {
         self.cursor += 1;
     }
 
-    const current = self.consume();
+    const current = self.peek();
+    self.cursor += 1;
     switch (current) {
         '>' => {
             if (self.match('=')) {
@@ -75,7 +76,7 @@ pub fn nextToken(self: *Self) ?Token {
                 return Token.operator(.true_);
             }
 
-            const start = self.cursor;
+            const start = self.cursor - 1;
             while (self.cursor < self.content.len and (std.ascii.isAlNum(self.peek()) or self.peek() == '_')) {
                 self.cursor += 1;
             }
