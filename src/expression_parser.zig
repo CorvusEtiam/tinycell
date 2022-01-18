@@ -9,7 +9,7 @@ const Tokenizer = @import("./Tokenizer.zig");
 // comparison -> term (('>'|'>='|'<='|'<') term)*
 // equality -> comparison ('<>'|'==' comparison)*
 
-pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err };
+pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err, ref };
 
 pub const BinOpExpr = struct {
     lhs: ?*Expr = null,
@@ -22,6 +22,21 @@ pub const UnOpExpr = struct {
     rhs: ?*Expr = null,
 };
 
+
+
+pub const CellIndex = struct {
+    pub const ADDR_ABS_BOTH = 0b11;
+    pub const ADDR_ABS_ROW = 0b10;
+    pub const ADDR_ABS_COL = 0b01;
+    pub const ADDR_ABS_NONE = 0b00;
+
+    row: u64 = 0,
+    column: u32 = 0,
+    ref_flag: u2 = ADDR_ABS_NONE,
+};
+
+// 64+32+2 => u8
+
 pub const Expr = union(ExprType) {
     numeric: f64,
     boolean: bool,
@@ -31,11 +46,11 @@ pub const Expr = union(ExprType) {
     unary_op: UnOpExpr,
     group: *Expr,
     err: []const u8,
+    ref: CellIndex,
 };
 
 const Token = Tokenizer.Token;
 
-// A1+A2+A3
 
 pub const Parser = struct {
     const Self = @This();
@@ -156,14 +171,29 @@ pub const Parser = struct {
             break :prim switch (self.current_token.?.token_type) {
                 .false_ => Expr{ .boolean = false },
                 .true_ => Expr{ .boolean = true },
-                .ident => Expr{ .ident = self.current_token.?.content },
+                .ident => {
+                    var num = std.fmt.parseFloat(f64, self.current_token.?.content) catch {
+                        // identify cell ref -- letter* digit*
+                        // cell ref -- starts with capital letters?
+                        const potential_ref = self.current_token.?.content;
+                        var col: u32 = 0;
+                        if ( std.ascii.isUpper(potential_ref[0]) ) {
+                            col = @as(u32, potential_ref[0] - 'A');
+                        } else {
+                        } 
+                        var row = std.fmt.parseInt(u64, potential_ref[1..], 10) catch {
+                            break :prim Expr{ .ident = self.current_token.?.content }; 
+                        };
+                        break :prim Expr { .ref = .{ .row = row, .column = col } };
+                    };
+                    break :prim Expr { .numeric = num };
+                },
                 .lparen => {
                     var expr = self.parse(); // skip lparen token, advance start parsing
-                    printExpressionTree(expr);
                     std.debug.assert( self.current_token != null );
                     if (!self.expectToken(.rparen)) {
                         std.debug.panic("Expected ')' token", .{});
-                        break :prim Expr { .err = "Expected ')' token" };
+                        break :prim Expr { .err = {} };
                     } else {
                         break :prim Expr{ .group = expr };
                     }
@@ -178,36 +208,3 @@ pub const Parser = struct {
     }
 };
 
-pub fn printExpressionTree(expr: *Expr) void {
-    switch (expr.*) {
-        Expr.binary_op => {
-            printExpressionTree(expr.binary_op.lhs.?);
-            std.debug.print(" Op<{s}> ", .{@tagName(expr.binary_op.operand)});
-            printExpressionTree(expr.binary_op.rhs.?);
-        },
-        Expr.unary_op => {
-            std.debug.print(" Op<{s}> ", .{@tagName(expr.unary_op.operand)});
-            printExpressionTree(expr.unary_op.rhs.?);
-        },
-        Expr.boolean => {
-            std.debug.print("Bool<{any}>\n", .{expr.boolean});
-        },
-        Expr.ident => {
-            std.debug.print("Ident<{s}>\n", .{expr.ident});
-        },
-        Expr.string => {
-            std.debug.print("Str<{s}>\n", .{expr.string});
-        },
-        Expr.numeric => {
-            std.debug.print("Num<{d}>\n", .{expr.numeric});
-        },
-        Expr.group => {
-            std.debug.print("Group<\n", .{});
-            printExpressionTree(expr.group);
-            std.debug.print(">", .{});
-        },
-        Expr.err => {
-            std.debug.print("Err<{s}>\n", .{ expr.err });
-        },
-    }
-}
