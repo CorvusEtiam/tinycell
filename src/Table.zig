@@ -58,6 +58,7 @@ pub fn dump(self: *Self) void {
                     switch ( expr.value ) {
                         .numeric => std.debug.print("| Expr({d})", .{ expr.value.numeric }),
                         .string => std.debug.print("| Expr({s})", .{ expr.value.string }),
+                        .err => std.debug.print("| Err ", .{ }),
                         else => std.debug.print("| Expr({any})", .{ expr.value }),
                     }
                     // std.debug.print("| Expr({any}) ", .{ expr.value });

@@ -110,8 +110,10 @@ pub fn evaluateCell(context: *Table, cell: *Cell) AppError!CellValue {
         return cell.as.value;
     }
 
-    var cell_expr: CellExpr = cell.as.expr;
+    var cell_expr: *CellExpr = &cell.as.expr;
     if (cell_expr.state == .inProgress) {
+        std.log.err("Circular dependency detected", .{});
+        utils.printExpressionTree(context.expr_list.items, cell_expr.expr);
         return error.circularDependency;
     }
 

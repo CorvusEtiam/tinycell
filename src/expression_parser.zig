@@ -29,10 +29,9 @@ pub const Parser = struct {
         };
     }
 
-    pub fn createExpr(self: *Self) ExprIndexWrapper {
-        self.store.append(Expr { .boolean = false }) catch unreachable;
-        const last_index = self.store.items.len - 1;
-        return .{ .index = last_index, .ptr = &self.store.items[last_index] };
+    pub fn createExpr(self: *Self) ExprIndex {
+        self.store.append(Expr { .numeric = 0.0 }) catch unreachable;
+        return self.store.items.len - 1;
     }
 
 
@@ -65,12 +64,12 @@ pub const Parser = struct {
 
     fn newBinaryOp(self: *Self, lhs: ExprIndex, op: Tokenizer.TokType, rhs: ExprIndex) ExprIndex {
         var tmp = self.createExpr();
-        tmp.ptr.* = Expr { .binary_op = .{
+        self.store.items[tmp] = Expr { .binary_op = .{
             .lhs = lhs,
             .operand = op,
             .rhs = rhs,
         } };
-        return tmp.index;
+        return tmp;
     }
 
     pub fn parse(self: *Self) ExprIndex {
@@ -127,8 +126,8 @@ pub const Parser = struct {
             var rhs = self.parseUnary();
             var expr = self.createExpr();
             
-            expr.ptr.* = Expr{ .unary_op = .{ .operand = operator.?.token_type, .rhs = rhs } };
-            return expr.index;
+            self.store.items[expr] = Expr{ .unary_op = .{ .operand = operator.?.token_type, .rhs = rhs } };
+            return expr;
         }
 
         return self.parsePrimary();
@@ -136,46 +135,48 @@ pub const Parser = struct {
 
     fn parsePrimary(self: *Self) ExprIndex {
         if ( self.current_token == null ) std.debug.panic("End of input", .{});
-        var primary_expr = self.createExpr();
+        var primary_expr_index = self.createExpr();
         
-        primary_expr.ptr.* = prim: {
-            break :prim switch (self.current_token.?.token_type) {
-                .false_ => Expr{ .boolean = false },
-                .true_ => Expr{ .boolean = true },
-                .ident => {
-                    var num = std.fmt.parseFloat(f64, self.current_token.?.content) catch {
-                        // identify cell ref -- letter* digit*
-                        // cell ref -- starts with capital letters?
-                        const potential_ref = self.current_token.?.content;
-                        var col: u32 = 0;
-                        if ( std.ascii.isUpper(potential_ref[0]) ) {
-                            col = @as(u32, potential_ref[0] - 'A');
-                        } else {
-                        } 
-                        var row = std.fmt.parseInt(u32, potential_ref[1..], 10) catch {
-                            break :prim Expr{ .ident = self.current_token.?.content }; 
-                        };
-                        break :prim Expr { .ref = .{ .row = row, .column = col } };
-                    };
-                    break :prim Expr { .numeric = num };
-                },
-                .lparen => {
-                    var expr = self.parse(); // skip lparen token, advance start parsing
-                    std.debug.assert( self.current_token != null );
-                    if (!self.expectToken(.rparen)) {
-                        std.debug.panic("Expected ')' token", .{});
-                        break :prim Expr { .err = {} };
-                    } else {
-                        break :prim Expr{ .group = expr };
+        switch ( self.current_token.?.token_type ) {
+            .false_ => { 
+                self.store.items[primary_expr_index] = Expr { .boolean = false };
+            },
+            .true_ => { 
+                self.store.items[primary_expr_index] = Expr { .boolean = true };
+            },
+            .ident => { 
+                    if (std.fmt.parseFloat(f64, self.current_token.?.content)) | num | {
+                        self.store.items[primary_expr_index] = Expr { .numeric = num };
+                        _ = self.advanceToken();
+                        return primary_expr_index;
+                    } else | _ | {}
+
+                    const potential_ref = self.current_token.?.content;
+                    var col: u32 = 0;
+                    if ( std.ascii.isUpper(potential_ref[0]) ) {
+                        col = @as(u32, potential_ref[0] - 'A');
+                    } 
+                    if ( std.fmt.parseInt(u32, potential_ref[1..], 10) ) | row | {
+                        self.store.items[primary_expr_index] = Expr { .ref = .{ .row = row, .column = col } };
+                    } else | _ | {
+                        self.store.items[primary_expr_index] = Expr{ .ident = self.current_token.?.content }; 
                     }
-                },
-                else => unreachable,
-            };
-        };
+            },
+            .lparen => { 
+                var expr = self.parse(); // skip lparen token, advance start parsing
+                std.debug.assert( self.current_token != null );
+                if (!self.expectToken(.rparen)) {
+                    std.debug.panic("Expected ')' token", .{});
+                    self.store.items[primary_expr_index] = Expr { .err = {} };
+                } else {
+                    self.store.items[primary_expr_index] = Expr{ .group = expr };
+                }
+            },
+            else => unreachable,
+        }
 
-        _ = self.advanceToken(); // load next token 
-
-        return primary_expr.index;
+        _ = self.advanceToken();
+        return primary_expr_index;
     }
 };
 

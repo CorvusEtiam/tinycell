@@ -34,7 +34,7 @@ pub fn calculateTableSize(table: []const u8) tbls.TableSpan {
 
     var row_index: u32 = 0;
     while (row_iterator.next()) |row| {
-        var cell_count: u32 = @intCast(u32, std.mem.count(u8, row, "\t") + 1);
+        var cell_count: u32 = @intCast(u32, std.mem.count(u8, row, "|") + 1);
 
         if (cell_count > max_column_count) {
             max_column_count = cell_count;
@@ -53,7 +53,7 @@ pub fn parseTableFromTSV(table: []const u8, size: tbls.TableSpan, alloc: std.mem
     var col_index: usize = 0;
     var row_iter = std.mem.tokenize(u8, table, "\r\n");
     while (row_iter.next()) |row| {
-        var cell_iter = std.mem.tokenize(u8, row, "\t");
+        var cell_iter = std.mem.tokenize(u8, row, "|");
         while (cell_iter.next()) |cell| {
             std.debug.print("Row x Col => {d} x {d}\n", .{ row_index, col_index });
             result_data.items[row_index * size.cols + col_index] = parseCellFromString(std.mem.trim(u8, cell, " "), alloc, &expr_list);

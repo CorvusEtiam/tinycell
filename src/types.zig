@@ -13,14 +13,14 @@ pub const ExprIndex = usize;
 pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err, ref };
 
 pub const BinOpExpr = struct {
-    lhs: ExprIndex = null,
+    lhs: ExprIndex = 0,
     operand: TokType = .ident,
-    rhs: ExprIndex = null,
+    rhs: ExprIndex = 0,
 };
 
 pub const UnOpExpr = struct {
     operand: TokType = .ident,
-    rhs: ExprIndex = null,
+    rhs: ExprIndex = 0,
 };
 
 pub const Expr = union(ExprType) {
