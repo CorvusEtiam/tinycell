@@ -1,21 +1,24 @@
 const std = @import("std");
-const Expr = @import("./expression_parser.zig").Expr;
+const Expr = @import("./types.zig").Expr;
+const ExprIndex = @import("./types.zig").ExprIndex;
 
-fn printExpressionTreeHelper(expr: *Expr, level: usize) void {
+
+fn printExpressionTreeHelper(ex: []const Expr, expr_index: ExprIndex, level: usize) void {
     const output = std.io.getStdErr().writer();
-    switch (expr.*) {
+    const expr = ex[expr_index];
+    switch (expr) {
         Expr.binary_op => {
             _ = output.writeByteNTimes(' ', level) catch unreachable;
             std.debug.print("BinOp<{s}> [\n", .{@tagName(expr.binary_op.operand)});
-            printExpressionTreeHelper(expr.binary_op.lhs.?, level + 1);
-            printExpressionTreeHelper(expr.binary_op.rhs.?, level + 1);
+            printExpressionTreeHelper(ex, expr.binary_op.lhs, level + 1);
+            printExpressionTreeHelper(ex, expr.binary_op.rhs, level + 1);
             _ = output.writeByteNTimes(' ', level)  catch unreachable;
             std.debug.print("]\n", .{});
         },
         Expr.unary_op => {
             _ = output.writeByteNTimes(' ', level)  catch unreachable;
             std.debug.print("UnOp<{s}> [\n", .{@tagName(expr.unary_op.operand)});
-            printExpressionTreeHelper(expr.unary_op.rhs.?, level + 1);
+            printExpressionTreeHelper(ex, expr.unary_op.rhs, level + 1);
             _ = output.writeByteNTimes(' ', level)  catch unreachable;
             std.debug.print("]\n", .{});
         },
@@ -38,13 +41,13 @@ fn printExpressionTreeHelper(expr: *Expr, level: usize) void {
         Expr.group => {
             _ = output.writeByteNTimes(' ', level)  catch unreachable;
             std.debug.print("Group [", .{});
-            printExpressionTree(expr.group);
+            printExpressionTree(ex, expr.group);
             _ = output.writeByteNTimes(' ', level)  catch unreachable;
             std.debug.print("]", .{});
             
         },
         Expr.ref => {
-            std.debug.print("Ref<{d}:{d}:{d}>\n", .{ expr.ref.column, expr.ref.row, expr.ref.ref_flag });
+            std.debug.print("Ref<{d}:{d}>\n", .{ expr.ref.column, expr.ref.row });
         },
         Expr.err => {
             std.debug.print("Err<>\n", .{ });
@@ -52,19 +55,12 @@ fn printExpressionTreeHelper(expr: *Expr, level: usize) void {
     }
 }
 
-pub fn printExpressionTree(expr: *Expr) void {
-    printExpressionTreeHelper(expr, 1);
+pub fn printExpressionTree(exp: []const Expr, start: ExprIndex) void {
+    printExpressionTreeHelper(exp, start, 1);
 }
 
 pub fn deinitExpressions(expr: *Expr, alloc: std.mem.Allocator) void {
     switch (expr.*) {
-        Expr.binary_op => {
-            deinitExpressions(expr.binary_op.lhs.?, alloc);
-            deinitExpressions(expr.binary_op.rhs.?, alloc);
-        },
-        Expr.unary_op => {
-            deinitExpressions(expr.unary_op.rhs.?, alloc);
-        },
         Expr.ident => {
             alloc.free(expr.ident);
         },
@@ -93,15 +89,11 @@ pub fn readWholeFile(path: []const u8, alloc: std.mem.Allocator) ![]const u8 {
 pub const CommandOptions = struct {
     input_file_path: []const u8 = undefined,
 
-    pub fn parse(alloc: std.mem.Allocator) anyerror!CommandOptions {
+    pub fn parse(alloc: std.mem.Allocator, comptime default_data: anytype) anyerror!CommandOptions {
         var args = try std.process.argsWithAllocator(alloc);
         defer args.deinit();
         _ = args.skip(); // skip program name
-        var file = try args.next(alloc) orelse unreachable;
+        const file = try args.next(alloc) orelse @field(default_data, "input_file_path");
         return CommandOptions { .input_file_path = file };
-    }
-
-    pub fn deinit(self: *CommandOptions, alloc: std.mem.Allocator) void {
-        alloc.free(self.input_file_path);
     }
 };

@@ -1,18 +1,27 @@
 const std = @import("std");
 const utils = @import("./utils.zig");
-const cells = @import("./cell.types.zig");
+const typedefs = @import("./types.zig");
 const AppError = @import("./main.zig").AppError;
+const parser = @import("./expression_parser.zig");
+
+const Expr  = typedefs.Expr;
+const Cell  = typedefs.Cell;
+const CellValue  = typedefs.CellValue;
+const CellContent = typedefs.CellContent; 
+const CellIndex = typedefs.CellIndex;
+
 
 pub const TableSpan = struct {
-    rows: usize = 0,
-    cols: usize = 0,
+    rows: u32 = 0,
+    cols: u32 = 0,
 };
 
 const Self = @This();
 
 allocator: std.mem.Allocator = undefined,
 size: TableSpan = .{},
-data: std.ArrayList(cells.Cell) = undefined,
+expr_list: std.ArrayList(Expr) = undefined,
+data: std.ArrayList(Cell) = undefined,
 
 pub fn dump(self: *Self) void {
     var col: usize = 0;
@@ -26,27 +35,32 @@ pub fn dump(self: *Self) void {
             col += 1;
             cell_index += 1;
         }) {
-            const cell: cells.Cell = self.data.items[cell_index];
+            const cell: Cell = self.data.items[cell_index];
             switch (cell.as) {
-                cells.CellContent.value => |val| switch (val) {
-                    cells.CellValue.empty => {
+                CellContent.value => |val| switch (val) {
+                    CellValue.empty => {
                         std.debug.print("| Empty() ", .{});
                     },
-                    cells.CellValue.boolean => {
+                    CellValue.boolean => {
                         std.debug.print("| Boolean({any}) ", .{val.boolean});
                     },
-                    cells.CellValue.string => {
+                    CellValue.string => {
                         std.debug.print("| String({s}) ", .{val.string});
                     },
-                    cells.CellValue.numeric => {
+                    CellValue.numeric => {
                         std.debug.print("| Num({d}) ", .{val.numeric});
                     },
-                    cells.CellValue.err => {
+                    CellValue.err => {
                         std.debug.print("| Err ", .{});
                     },
                 },
-                cells.CellContent.expr => {
-                    std.debug.print("| Expr() ", .{});
+                CellContent.expr => | expr | {
+                    switch ( expr.value ) {
+                        .numeric => std.debug.print("| Expr({d})", .{ expr.value.numeric }),
+                        .string => std.debug.print("| Expr({s})", .{ expr.value.string }),
+                        else => std.debug.print("| Expr({any})", .{ expr.value }),
+                    }
+                    // std.debug.print("| Expr({any}) ", .{ expr.value });
                 },
             }
         }
@@ -55,20 +69,13 @@ pub fn dump(self: *Self) void {
 }
 
 pub fn deinit(self: *Self) void {
-    for (self.data.items) |cell| {
-        switch (cell.as) {
-            cells.CellContent.expr => |expr| {
-                utils.deinitExpressions(expr.expr, self.allocator);
-            },
-            else => continue,
-        }
-    }
+    self.expr_list.deinit();
     self.data.deinit();
 }
 
-pub fn cellAt(self: *Self, at: cells.CellIndex) AppError!*cells.Cell {
-    if (at.row >= self.size.rows or at.col >= self.size.cols) {
-        return error.AppError.outOfBoundAccess;
+pub fn cellAt(self: *Self, at: CellIndex) AppError!*Cell {
+    if (at.row >= self.size.rows or at.column >= self.size.cols) {
+        return error.outOfBoundAccess;
     }
-    return &self.data.items[at.row * self.size.cols + at.col];
+    return &self.data.items[at.row * self.size.cols + at.column];
 }
