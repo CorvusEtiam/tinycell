@@ -147,6 +147,7 @@ pub const Parser = struct {
             .ident => { 
                     if (std.fmt.parseFloat(f64, self.current_token.?.content)) | num | {
                         self.store.items[primary_expr_index] = Expr { .numeric = num };
+                        self.tokenizer.alloc.free(self.current_token.?.content);
                         _ = self.advanceToken();
                         return primary_expr_index;
                     } else | _ | {}
@@ -158,6 +159,7 @@ pub const Parser = struct {
                     } 
                     if ( std.fmt.parseInt(u32, potential_ref[1..], 10) ) | row | {
                         self.store.items[primary_expr_index] = Expr { .ref = .{ .row = row, .column = col } };
+                        self.tokenizer.alloc.free(self.current_token.?.content);
                     } else | _ | {
                         self.store.items[primary_expr_index] = Expr{ .ident = self.current_token.?.content }; 
                     }

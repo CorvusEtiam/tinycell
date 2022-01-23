@@ -1,7 +1,16 @@
 # Tiny Cell Evaluator
 
+Currently it supports:
 
-## Expressions
+* Loading `|` limited text
+* `A1` style references inside cells
+* Circular-dependency detection
+* Basic math ops (+, -, /, *)
 
-* math
-* functions
+## Future Plans
+
++ Add formulas
++ Better memory layout
++ Add proper gui **MAJOR**
++ Explore DAG for cells relations
+

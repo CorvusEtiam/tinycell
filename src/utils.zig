@@ -47,7 +47,7 @@ fn printExpressionTreeHelper(ex: []const Expr, expr_index: ExprIndex, level: usi
             
         },
         Expr.ref => {
-            std.debug.print("Ref<{d}:{d}>\n", .{ expr.ref.column, expr.ref.row });
+            std.debug.print("Ref<{d}:{d}\n", .{ expr.ref.column, expr.ref.row });
         },
         Expr.err => {
             std.debug.print("Err<>\n", .{ });
@@ -89,11 +89,22 @@ pub fn readWholeFile(path: []const u8, alloc: std.mem.Allocator) ![]const u8 {
 pub const CommandOptions = struct {
     input_file_path: []const u8 = undefined,
 
-    pub fn parse(alloc: std.mem.Allocator, comptime default_data: anytype) anyerror!CommandOptions {
+    pub fn parse(alloc: std.mem.Allocator, comptime defaults: anytype) anyerror!CommandOptions {
         var args = try std.process.argsWithAllocator(alloc);
         defer args.deinit();
         _ = args.skip(); // skip program name
-        const file = try args.next(alloc) orelse @field(default_data, "input_file_path");
-        return CommandOptions { .input_file_path = file };
+        
+        if ( args.next(alloc) ) | arg_or_err | {
+            var file = try arg_or_err;
+            return CommandOptions { .input_file_path = file };
+        } else {
+            var file = try alloc.dupe(u8, @field(defaults, "input_file_path"));
+            return CommandOptions { .input_file_path = file };
+        }
+       // const file: ?[]const u8 = (args.next(alloc) orelse null);
+    }
+
+    pub fn deinit(self: *CommandOptions, alloc: std.mem.Allocator) void {
+        alloc.free(self.input_file_path);
     }
 };

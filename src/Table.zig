@@ -23,6 +23,10 @@ size: TableSpan = .{},
 expr_list: std.ArrayList(Expr) = undefined,
 data: std.ArrayList(Cell) = undefined,
 
+pub fn pprint(self: *Self) void {
+    _ = self;
+}
+
 pub fn dump(self: *Self) void {
     var col: usize = 0;
     var row: usize = 0;
@@ -45,7 +49,7 @@ pub fn dump(self: *Self) void {
                         std.debug.print("| Boolean({any}) ", .{val.boolean});
                     },
                     CellValue.string => {
-                        std.debug.print("| String({s}) ", .{val.string});
+                        std.debug.print("| {s} ", .{val.string});
                     },
                     CellValue.numeric => {
                         std.debug.print("| Num({d}) ", .{val.numeric});

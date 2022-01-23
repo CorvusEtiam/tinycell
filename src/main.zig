@@ -55,7 +55,6 @@ pub fn parseTableFromTSV(table: []const u8, size: tbls.TableSpan, alloc: std.mem
     while (row_iter.next()) |row| {
         var cell_iter = std.mem.tokenize(u8, row, "|");
         while (cell_iter.next()) |cell| {
-            std.debug.print("Row x Col => {d} x {d}\n", .{ row_index, col_index });
             result_data.items[row_index * size.cols + col_index] = parseCellFromString(std.mem.trim(u8, cell, " "), alloc, &expr_list);
             col_index += 1;
         }
@@ -81,28 +80,32 @@ pub fn parseTableFromTSV(table: []const u8, size: tbls.TableSpan, alloc: std.mem
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var allocator = gpa.allocator();
-    // FIXME: Deallocate everything. Maybe store expressions in a single buffer like tsoding did?
-    var command_options = utils.CommandOptions.parse(allocator, .{ .input_file_path = "data/input.csv" }) catch {
+    defer { _ = gpa.deinit(); }
+
+    // FIXME: Better stategy for command options? Maybe use buffer
+      
+    var command_options = utils.CommandOptions.parse(gpa.allocator(), .{ .input_file_path = "data/expr.csv" }) catch {
         std.debug.panic("Unhandled error in command options", .{});
     };
+    defer command_options.deinit(allocator);
 
-    std.log.info("Options passed: {s}", .{command_options.input_file_path});
+//    std.log.info("Options passed: {s}", .{command_options.input_file_path});
     var csv_content: []const u8 = utils.readWholeFile(command_options.input_file_path, allocator) catch {
         std.log.err("There was error while loading file. Check if file exist", .{});
         std.log.err("Load from path: {s}", .{command_options.input_file_path});
         return;
     };
-    // defer allocator.free(csv_content);
+    defer allocator.free(csv_content);
 
     const table_size = calculateTableSize(csv_content);
-    std.debug.print("Table size: {d}x{d}\n", .{ table_size.rows, table_size.cols });
+//    std.debug.print("Table size: {d}x{d}\n", .{ table_size.rows, table_size.cols });
 
     var table = try parseTableFromTSV(csv_content, table_size, gpa.allocator());
     defer table.deinit();
 
-    std.debug.print("=" ** 80 ++ "\n", .{});
-    table.dump();
-    std.debug.print("\n" ++ ("=" ** 80) ++ "\n", .{});
+//    std.debug.print("=" ** 80 ++ "\n", .{});
+//    table.dump();
+//    std.debug.print("\n" ++ ("=" ** 80) ++ "\n", .{});
     evaluator.evaluateTable(&table);
     table.dump();
 }
