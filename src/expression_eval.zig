@@ -90,6 +90,10 @@ pub fn evaluateExpression(context: *Table, ast_index: ExprIndex) AppError!CellVa
         .boolean => {
             return CellValue{ .boolean = ast_node.boolean };
         },
+        .formula => {
+            // TODO: Formula evaluation
+            return CellValue { .empty = {} };
+        }
     }
 
     // string, numeric, boolean -> return copy

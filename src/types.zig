@@ -2,15 +2,17 @@ const std = @import("std");
 const TokType = @import("./Tokenizer.zig").TokType;
 
 pub const ExprIndex = usize;
-// literal -> number | 'FALSE' | 'TRUE'
-// primary -> literal | '(' expr ')'
-// unary -> '-' unary | primary
-// factor -> unary (('*' | '/') unary)*
-// term   -> factor (('+'|'-') factor)*
-// comparison -> term (('>'|'>='|'<='|'<') term)*
-// equality -> comparison ('<>'|'==' comparison)*
 
-pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err, ref };
+// literal    ->  number | 'FALSE' | 'TRUE'
+// primary    ->  literal | '(' expr ')'
+// formula    ->  ident '(' primary (',' primary)* ')'
+// unary      ->  formula | '-' unary | primary
+// factor     ->  unary (('*' | '/') unary)*
+// term       ->  factor (('+'|'-') factor)*
+// comparison ->  term (('>'|'>='|'<='|'<') term)*
+// equality   ->  comparison ('<>'|'==' comparison)*
+
+pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err, ref, formula };
 
 pub const BinOpExpr = struct {
     lhs: ExprIndex = 0,
@@ -23,6 +25,11 @@ pub const UnOpExpr = struct {
     rhs: ExprIndex = 0,
 };
 
+pub const Formula = struct {
+    name: []const u8,
+    arguments: []ExprIndex,
+};
+
 pub const Expr = union(ExprType) {
     numeric: f64,
     boolean: bool,
@@ -33,8 +40,8 @@ pub const Expr = union(ExprType) {
     group: ExprIndex,
     err: []const u8,
     ref: CellIndex,
+    formula: Formula,
 };
-
 
 pub const EvaluationState = enum { notEvaluated, inProgress, evaluated };
 
@@ -72,6 +79,21 @@ pub const CellContent = union(CellContentType) {
 pub const Cell = struct {
     as: CellContent = .{ .value = .{ .empty = {} } },
     
+    pub fn getValue(self: *Cell) CellValue {
+        switch ( self.as ) {
+            .expr => | expr | {
+                if ( expr.state == .evaluated ) {
+                    return expr.value;
+                } else {
+                    return CellValue { .empty = { } };
+                }
+            },
+            .value => {
+                return self.as.value;
+            }
+        } 
+    }
+
     pub inline fn isExpr(self: *const Cell) bool {
         return std.meta.activeTag(self.as) == CellContent.expr;
     }

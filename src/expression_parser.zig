@@ -19,11 +19,13 @@ pub const Parser = struct {
     const Self = @This();
 
     store: *std.ArrayList(Expr) = undefined,
+    alloc: std.mem.Allocator = undefined,
     tokenizer: Tokenizer,
     current_token: ?Token = null,
 
     pub fn init(expr: []const u8, store: *ExprList, alloc: std.mem.Allocator) Parser {
         return Parser{
+            .alloc = alloc,
             .store = store,
             .tokenizer = Tokenizer{ .alloc = alloc, .content = expr },
         };
@@ -119,18 +121,37 @@ pub const Parser = struct {
 
         return expr;
     }
-
+    // unary -> '-' primary | primary | formula
     fn parseUnary(self: *Self) ExprIndex {
         if (self.matchToken(&.{.minus})) {
             var operator = self.advanceToken(); 
             var rhs = self.parseUnary();
             var expr = self.createExpr();
-            
             self.store.items[expr] = Expr{ .unary_op = .{ .operand = operator.?.token_type, .rhs = rhs } };
             return expr;
-        }
-
+        } 
+        // else if (self.matchToken(&.{.ident})) {
+            // formula   -> ident '(' arguments? ')'
+            //const formula_name = self.advanceToken();
+            //const args = self.parseArguments();
+            //self.store.items[expr] = Expr { .formula = .{ .name = formula_name, .arguments = args } };
+        //}
         return self.parsePrimary();
+    }
+
+    // arguments -> expr (',' expr)*
+    fn parseArguments(self: *Self) []ExprIndex {
+        var args_list = std.ArrayList(ExprIndex).init(self.alloc);
+        while ( true ) {
+            if ( self.matchToken(&.{ .rparen }) ) {
+                // end of argument list
+                return args_list.toOwnedSlice();
+            } 
+            var arg = self.parsePrimary();
+            args_list.append(arg) catch unreachable;
+        } 
+        
+        return {};
     }
 
     fn parsePrimary(self: *Self) ExprIndex {

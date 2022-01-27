@@ -1,3 +1,6 @@
-A	B	C
-1	2	3	
-4	Hello	=A2+A3-C2	a	SOME text I would love to place here
+sep=|
+A  | B     |C         |D |              E                     |
+1  | 2     |3         |  |                                    |
+4  | Hello |=A1+B1-C1 |a |SOME text I would love to place here|
+:^ |       |          |- |ABBA                                |
+=SUM(@"A")

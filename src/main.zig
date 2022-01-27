@@ -30,11 +30,19 @@ pub fn parseCellFromString(str: []const u8, alloc: std.mem.Allocator, expr_list:
 
 pub fn calculateTableSize(table: []const u8) tbls.TableSpan {
     var row_iterator = std.mem.tokenize(u8, table, "\r\n");
-    var max_column_count: u32 = 0;
+    const separator: u8 = sep: {
+        if ( std.mem.startsWith(u8, table, "sep=") ) {
+            _ = row_iterator.next();
+            break :sep table[4];
+        } else {
+            break :sep '|';
+        }
+    };
 
+    var max_column_count: u32 = 0;
     var row_index: u32 = 0;
     while (row_iterator.next()) |row| {
-        var cell_count: u32 = @intCast(u32, std.mem.count(u8, row, "|") + 1);
+        var cell_count: u32 = @intCast(u32, std.mem.count(u8, row, &.{ separator }) + 1);
 
         if (cell_count > max_column_count) {
             max_column_count = cell_count;
@@ -52,8 +60,18 @@ pub fn parseTableFromTSV(table: []const u8, size: tbls.TableSpan, alloc: std.mem
     var row_index: usize = 0;
     var col_index: usize = 0;
     var row_iter = std.mem.tokenize(u8, table, "\r\n");
+    const separator: u8 = sep: {
+        if ( std.mem.startsWith(u8, table, "sep=") ) {
+            _ = row_iter.next();
+            break :sep table[4];
+        } else {
+            break :sep '|';
+        }
+    };
+
+    
     while (row_iter.next()) |row| {
-        var cell_iter = std.mem.tokenize(u8, row, "|");
+        var cell_iter = std.mem.tokenize(u8, row, &.{ separator });
         while (cell_iter.next()) |cell| {
             result_data.items[row_index * size.cols + col_index] = parseCellFromString(std.mem.trim(u8, cell, " "), alloc, &expr_list);
             col_index += 1;
@@ -82,14 +100,11 @@ pub fn main() anyerror!void {
     var allocator = gpa.allocator();
     defer { _ = gpa.deinit(); }
 
-    // FIXME: Better stategy for command options? Maybe use buffer
-      
     var command_options = utils.CommandOptions.parse(gpa.allocator(), .{ .input_file_path = "data/expr.csv" }) catch {
         std.debug.panic("Unhandled error in command options", .{});
     };
     defer command_options.deinit(allocator);
 
-//    std.log.info("Options passed: {s}", .{command_options.input_file_path});
     var csv_content: []const u8 = utils.readWholeFile(command_options.input_file_path, allocator) catch {
         std.log.err("There was error while loading file. Check if file exist", .{});
         std.log.err("Load from path: {s}", .{command_options.input_file_path});
@@ -98,7 +113,6 @@ pub fn main() anyerror!void {
     defer allocator.free(csv_content);
 
     const table_size = calculateTableSize(csv_content);
-//    std.debug.print("Table size: {d}x{d}\n", .{ table_size.rows, table_size.cols });
 
     var table = try parseTableFromTSV(csv_content, table_size, gpa.allocator());
     defer table.deinit();
@@ -108,4 +122,7 @@ pub fn main() anyerror!void {
 //    std.debug.print("\n" ++ ("=" ** 80) ++ "\n", .{});
     evaluator.evaluateTable(&table);
     table.dump();
+    std.debug.print("\n{s}\n", .{ "="**80 });
+    
+    try utils.printSliceAsTable(allocator, table.data.items, table.size);
 }
