@@ -72,7 +72,7 @@ pub fn printExpressionTree(exp: []const Expr, start: ExprIndex) void {
     printExpressionTreeHelper(exp, start, 1);
 }
 
-pub fn deinitExpressions(expr: *Expr, alloc: std.mem.Allocator) void {
+pub fn deinitExpressions(exp: []Expr, expr: *Expr, alloc: std.mem.Allocator) void {
     switch (expr.*) {
         Expr.ident => {
             alloc.free(expr.ident);
@@ -81,7 +81,7 @@ pub fn deinitExpressions(expr: *Expr, alloc: std.mem.Allocator) void {
             alloc.free(expr.string);
         },
         Expr.group => {
-            deinitExpressions(expr.group, alloc);
+            deinitExpressions(exp, &exp[expr.group], alloc);
         },
         else => return,
     }

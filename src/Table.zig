@@ -74,7 +74,21 @@ pub fn dump(self: *Self) void {
 }
 
 pub fn deinit(self: *Self) void {
+    for ( self.expr_list.items ) | *expr | {
+        utils.deinitExpressions(self.expr_list.items, expr, self.allocator);
+    }
     self.expr_list.deinit();
+    for ( self.data.items ) | cell | {
+        switch ( cell.as ) {
+            .value => | val | {
+                switch ( val ) {
+                    .string => | str | { self.allocator.free(str); },
+                    else => continue,
+                }
+            },
+            .expr => continue,
+        }
+    }
     self.data.deinit();
 }
 
