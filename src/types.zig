@@ -1,5 +1,6 @@
 const std = @import("std");
 const TokType = @import("./Tokenizer.zig").TokType;
+const AppError = @import("./main.zig").AppError;
 
 pub const ExprIndex = usize;
 
@@ -12,7 +13,19 @@ pub const ExprIndex = usize;
 // comparison ->  term (('>'|'>='|'<='|'<') term)*
 // equality   ->  comparison ('<>'|'==' comparison)*
 
-pub const ExprType = enum(u8) { numeric = 0, boolean, string, ident, binary_op, unary_op, group, err, ref, formula };
+pub const ExprType = enum(u8) {
+    numeric = 0,
+    boolean,
+    string,
+    ident,
+    binary_op,
+    unary_op,
+    group,
+    err,
+    ref,
+    formula,
+    clone,
+};
 
 pub const BinOpExpr = struct {
     lhs: ExprIndex = 0,
@@ -30,6 +43,36 @@ pub const Formula = struct {
     arguments: []ExprIndex,
 };
 
+pub const Cardinal = enum {
+    north,
+    east,
+    south,
+    west,
+
+    pub fn fromChar(char: u8) AppError!Cardinal {
+        return switch (char) {
+            '^' => .north,
+            'v', 'V' => .south,
+            '<' => .west,
+            '>' => .east,
+            else => error.parseError,
+        };
+    }
+// =:>
+    pub fn getOpposite(self: Cardinal) Cardinal {
+        return switch (self) {
+            .north => .south,
+            .east => .west,
+            .south => .north,
+            .west => .east,
+        };
+    }
+};
+
+pub const Clone = struct {
+    direction: Cardinal,
+};
+
 pub const Expr = union(ExprType) {
     numeric: f64,
     boolean: bool,
@@ -41,6 +84,7 @@ pub const Expr = union(ExprType) {
     err: []const u8,
     ref: CellIndex,
     formula: Formula,
+    clone: Clone,
 };
 
 pub const EvaluationState = enum { notEvaluated, inProgress, evaluated };
@@ -58,62 +102,70 @@ pub const CellValue = union(CellValueType) {
     pub fn isNumeric(self: Self) bool {
         return switch (self) {
             .numeric => true,
-            else => false
+            else => false,
         };
     }
 };
 
 pub const CellExpr = struct {
-    expr:  ExprIndex = 0,
+    expr: ExprIndex = 0,
     state: EvaluationState = .notEvaluated,
     value: CellValue = .{ .empty = {} },
 };
 
-pub const CellContentType = enum(u1) { expr, value };
+pub const CellContentType = enum {
+    expr,
+    value,
+};
 
 pub const CellContent = union(CellContentType) {
-    expr:  CellExpr,
+    expr: CellExpr,
     value: CellValue,
 };
 
 pub const Cell = struct {
+    index: CellIndex,
     as: CellContent = .{ .value = .{ .empty = {} } },
-    
+
     pub fn getValue(self: *Cell) CellValue {
-        switch ( self.as ) {
-            .expr => | expr | {
-                if ( expr.state == .evaluated ) {
+        switch (self.as) {
+            .expr => |expr| {
+                if (expr.state == .evaluated) {
                     return expr.value;
                 } else {
-                    return CellValue { .empty = { } };
+                    return CellValue{ .empty = {} };
                 }
             },
             .value => {
                 return self.as.value;
-            }
-        } 
+            },
+        }
     }
 
-    pub inline fn isExpr(self: *const Cell) bool {
-        return std.meta.activeTag(self.as) == CellContent.expr;
+    pub fn getCellType(self: Cell) CellContentType {
+        return std.meta.activeTag(self.as);
     }
 
-    pub inline fn fromExpression(expr: ExprIndex) Cell {
-        return .{ .as = .{ .expr = CellExpr{ .expr = expr } } };
+    pub inline fn fromExpression(index: CellIndex, expr: ExprIndex) Cell {
+        return .{ .index = index, .as = .{ .expr = CellExpr{ .expr = expr } } };
     }
 
-    pub inline fn fromValue(val: CellValue) Cell {
-        return .{ .as = .{ .value = val } };
+    pub inline fn fromValue(index: CellIndex, val: CellValue) Cell {
+        return .{ .index = index, .as = .{ .value = val } };
+    }
+
+    pub inline fn fromEmpty(index: CellIndex) Cell {
+        return .{ .index = index };
     }
 
     pub fn updateValue(self: *Cell, val: CellValue) void {
-        switch ( self.as ) {
-            .expr => { 
+        switch (self.as) {
+            .expr => {
                 self.as.expr.value = val;
             },
-            .value => { 
+            .value => {
                 self.as.value = val;
-            }
+            },
         }
     }
 };
@@ -122,4 +174,32 @@ pub const Cell = struct {
 pub const CellIndex = struct {
     row: u32 = 0,
     column: u32 = 0,
+
+    pub fn offsetInDirection(self: CellIndex, dir: Cardinal) AppError!CellIndex {
+        var copy = CellIndex{ .row = self.row, .column = self.column };
+        switch (dir) {
+            .north => {
+                if (copy.row > 0) {
+                    copy.row -= 1;
+                } else {
+                    return error.outOfBoundAccess;
+                }
+            },
+            .west => {
+                if (self.column > 0) {
+                    copy.column -= 1;
+                } else {
+                    return error.outOfBoundAccess;
+                }
+            },
+            .south => {
+                copy.row += 1;
+            },
+            .east => {
+                copy.column += 1;
+            },
+        }
+
+        return copy;
+    }
 };

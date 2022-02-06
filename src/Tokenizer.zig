@@ -11,6 +11,9 @@ content: []const u8 = undefined,
 cursor: usize = 0,
 
 fn peek(self: *Self) u8 {
+    if ( self.cursor == self.content.len ) {
+        return 0;
+    }
     return self.content[self.cursor];
 }
 
@@ -21,16 +24,29 @@ fn consume(self: *Self) u8 {
 }
 
 fn match(self: *Self, next_char: u8) bool {
-    if ( self.peek() == next_char ) return true;
+    return ( self.peek() == next_char );
+}
 
+fn matchAndConsume(self: *Self, expected: u8) bool {
+    if ( self.peek() == expected ) {
+        self.cursor += 1;
+        return true;
+    } 
     return false;
 }
 
-pub fn nextToken(self: *Self) ?Token {
+pub const TokenizerError = error {
+    unexpectedChar,
+    unexpectedEndOfInput,
+};
+
+// FIXME: Graceful error handling
+// maybe swap nextToken ?Token into !Token, and use error{ endOfInput, unexpectedChar };
+pub fn nextToken(self: *Self) TokenizerError!?Token {
     // end of stream
     if (self.cursor >= self.content.len) return null;
 
-    while (self.cursor < self.content.len and self.content[self.cursor] == ' ') {
+    while (self.cursor < self.content.len and std.ascii.isBlank(self.content[self.cursor])) {
         self.cursor += 1;
     }
 
@@ -59,7 +75,17 @@ pub fn nextToken(self: *Self) ?Token {
             if (self.match('=')) {
                 self.cursor += 1;
                 return Token.operator(.eq);
+            } else {
+                return error.unexpectedChar;
             }
+        },
+        ':' => {
+            if ( self.matchAndConsume('>') ) return Token.operator(.clone_w);
+            if ( self.matchAndConsume('<') ) return Token.operator(.clone_e);
+            if ( self.matchAndConsume('v') or self.matchAndConsume('V') ) return Token.operator(.clone_s);
+            if ( self.matchAndConsume('^') ) return Token.operator(.clone_n);
+            
+            return error.unexpectedChar;
         },
         '(' => return Token.operator(.lparen),
         ')' => return Token.operator(.rparen),
@@ -84,5 +110,4 @@ pub fn nextToken(self: *Self) ?Token {
             return Token.ident(content);
         },
     }
-    return null;
 }

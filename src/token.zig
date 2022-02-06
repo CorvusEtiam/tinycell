@@ -1,4 +1,7 @@
+const Cardinal = @import("./types.zig").Cardinal;
+
 pub const TokType = enum {
+    err,
     ident,
     plus,
     minus,
@@ -14,6 +17,10 @@ pub const TokType = enum {
     neq, // <>
     false_, // FALSE
     true_, // TRUE
+    clone_n,
+    clone_e,
+    clone_s,
+    clone_w,
 };
 
 pub const Token = struct {

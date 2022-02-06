@@ -4,12 +4,11 @@ const typedefs = @import("./types.zig");
 const AppError = @import("./main.zig").AppError;
 const parser = @import("./expression_parser.zig");
 
-const Expr  = typedefs.Expr;
-const Cell  = typedefs.Cell;
-const CellValue  = typedefs.CellValue;
-const CellContent = typedefs.CellContent; 
+const Expr = typedefs.Expr;
+const Cell = typedefs.Cell;
+const CellValue = typedefs.CellValue;
+const CellContent = typedefs.CellContent;
 const CellIndex = typedefs.CellIndex;
-
 
 pub const TableSpan = struct {
     rows: u32 = 0,
@@ -58,12 +57,12 @@ pub fn dump(self: *Self) void {
                         std.debug.print("| Err ", .{});
                     },
                 },
-                CellContent.expr => | expr | {
-                    switch ( expr.value ) {
-                        .numeric => std.debug.print("| Expr({d})", .{ expr.value.numeric }),
-                        .string => std.debug.print("| Expr({s})", .{ expr.value.string }),
-                        .err => std.debug.print("| Err ", .{ }),
-                        else => std.debug.print("| Expr({any})", .{ expr.value }),
+                CellContent.expr => |expr| {
+                    switch (expr.value) {
+                        .numeric => std.debug.print("| Expr({d})", .{expr.value.numeric}),
+                        .string => std.debug.print("| Expr({s})", .{expr.value.string}),
+                        .err => std.debug.print("| Err ", .{}),
+                        else => std.debug.print("| Expr({any})", .{expr.value}),
                     }
                     // std.debug.print("| Expr({any}) ", .{ expr.value });
                 },
@@ -74,15 +73,17 @@ pub fn dump(self: *Self) void {
 }
 
 pub fn deinit(self: *Self) void {
-    for ( self.expr_list.items ) | *expr | {
+    for (self.expr_list.items) |*expr| {
         utils.deinitExpressions(self.expr_list.items, expr, self.allocator);
     }
     self.expr_list.deinit();
-    for ( self.data.items ) | cell | {
-        switch ( cell.as ) {
-            .value => | val | {
-                switch ( val ) {
-                    .string => | str | { self.allocator.free(str); },
+    for (self.data.items) |cell| {
+        switch (cell.as) {
+            .value => |val| {
+                switch (val) {
+                    .string => |str| {
+                        self.allocator.free(str);
+                    },
                     else => continue,
                 }
             },
@@ -90,6 +91,25 @@ pub fn deinit(self: *Self) void {
         }
     }
     self.data.deinit();
+}
+
+pub fn cloneCell(self: *Self, source: CellIndex, target: CellIndex) void {
+    var source_cell = self.cellAt(source);
+    var target_cell = self.cellAt(target);
+    // check if cell is an expression -> just return: TODO later
+    switch (source_cell) {
+        .expr => {
+            return;
+        },
+        .value => {
+            target_cell.value = source_cell.value;
+        },
+    }
+}
+
+pub fn getNeighbourCellInDirection(self: *Self, index: CellIndex, direction: typedefs.Cardinal) AppError!*Cell {
+    var offseted = index.offsetInDirection(direction.getOpposite());
+    return try self.cellAt(offseted);
 }
 
 pub fn cellAt(self: *Self, at: CellIndex) AppError!*Cell {
